@@ -1,0 +1,283 @@
+---
+title: "Intro to ggplot"
+author: "Yarrow Dunham"
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+---
+
+## R Markdown
+
+If you are looking at the .Rmd file in RStudio then you are looking at an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. You can execute code by clicking the *Run* button within the chunk. 
+
+If you're looking at this in a browser, i.e. as an .html file, you're looking at a rendered version that is good for sharing, even with people who don't use R. FYI, this is what I will be wanting as a lab default when sharing results with me in the future, because I can see results and code together, and we can more easily intersperse **code**, **results**, and **interpretation** in a single document. Also once it's rendered into .html or .pdf it's easy to look one of these documents on my phone or another a computer or whatever, without having to get R up and running.
+
+I almost always start myt R sessions by loading the tidyverse package. It's actually a collection of packages including ggplot2 for graphing, tidyr for data wrangling, dplyr for various summarizing functions, and a few others that I use less. It also changes the style of the default R dataframe a little bit, for example making it so text fields default to character variables rather than factors, which I find convenient. 
+
+
+```{r setup}
+# load the tidyverse package of packages
+library(tidyverse)
+# load two other packages we'll use
+library(ggthemes)
+library(ggbeeswarm)
+```
+
+## Some basic line and bar graphs
+
+ggplot is based on something called "the grammar of graphics," which tries to standardize a language for expressing graphical parameters. Unfortunately some of this so-called grammar is kind of complex. But there are a few basics, namely that you define an *aesthetic* which defines what variables are represented on each axis, and then you apply one or more *geometries* to that space. So you can plot the same data as a barplot or a dotplot; that reflects the same aesthetic but a different geometry. 
+
+```{r bar and line graphs}
+
+# initialize a dataframe with a value for treatment and control 'conditions'
+# we'll set a randomizer seed explicitly so we get the same results in future runs
+set.seed(133)
+df <- data.frame(avg=runif(2),condition=c('treatment','control'))
+
+## make a barplot
+# first set up the aesthetic, using the dataframe df and putting the two conditions on the x-axis, and map it to an R object, bar
+bar <- ggplot(df,aes(x=condition,y=avg))
+bar
+# Notice we just get a blank display with just the x and y axes labeled but no data. That's because we've set up a coordinate space but not applied a geometry to it.
+# so let's add a barplot; the stat='identity' is just telling ggplot that you are providing the exact values you want it to plot rather than say having it count instances of something in the data. I know, weird.
+bar + geom_bar(stat='identity')
+
+# you can do this all in one step by connecting each piece with a +, which is often useful. You can string together very long and complex plots this way.
+bar2 <- ggplot(df,aes(x=condition,y=avg)) +
+  geom_bar(stat='identity')
+
+# but an advantage of keeping it separate is that now you can apply a different geometry to the same aesthetic
+# for example, to make a dotplot
+bar + geom_point()
+# you can also keep buildig up R objects in this way to create intermediate steps if your graph will get complex
+dotplot <- bar + geom_point()
+dotplot
+
+# you can also add other information to the aesthetic, such as a color mapping. Here we map color to condition
+bar3 <- ggplot(df,aes(x=condition,y=avg,color=condition)) + geom_bar(stat='identity')
+bar3
+# oh, but color is just the color of the line! What we want is to change the fill.
+bar4 <- ggplot(df,aes(x=condition,y=avg,fill=condition)) + geom_bar(stat='identity')
+bar4
+# we can also manually assign colors by manually assigning the fill colors
+bar4 + scale_fill_manual(values=c('green','yellow'))
+
+# what's cool is you can continue to add additional elements by adding them to the original R object
+bar4 + scale_fill_manual(values=c('green','yellow')) + ggtitle("Wow I'm ugly!")
+
+# it's also easy to plot data subdivided by group, e.g. we had two conditions, but what if we also have two age groups? First we'll add two more rows corresponding to the two new conditions
+df <- rbind(df,data.frame(avg=runif(2),condition=c('treatment','control')))
+# and assign them to a different factor
+df$age <- c('young','young','old','old')
+
+# now we can create a new graph that adds a group to the aesthetic by giving it a grouping variable with the group option. We'll also link the fill color to the grouping variable using the fill option so that it varies the color of the bars by that factor. 
+newbar <- ggplot(df,aes(x=condition,y=avg,group=age,fill=age)) + geom_bar(stat='identity')
+newbar
+# wait, that's not what we wanted! geom_bar defaults to a stacked bar when there is a grouping variable. To change that we need to set the position to "dodge", i.e. the two grouping levels are dodging one another
+newbar <- ggplot(df,aes(x=condition,y=avg,group=age,fill=age)) + geom_bar(stat='identity', position=position_dodge())
+newbar
+
+# it's also really easy to add error bars with built in ggplot geometries. error bars need their own aesthetic showing the upper and lower positions. I'll just set them at .1, but of course you'd probably really use the se or 1.96*se for a 95% CI. 
+newbar + geom_errorbar(aes(ymin = avg - .1, ymax = avg + .1), width = 0.2)
+# hey, that's weird, what happened? Oh, our bars are "dodging" one another, so we need to tell the error bars to do that too, and in fact you have to tell it how much to dodge. For some reason .9 is right for bar graphs. Huh.
+newbar + geom_errorbar(aes(ymin = avg - .1, ymax = avg + .1), width = 0.2, position=position_dodge(.9))
+# in practice you might have the standard errors in your dataframe and plot directly from that
+df$se <- c(.07,.09,.1,.11)
+ggplot(df,aes(x=condition,y=avg,group=age,fill=age)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  geom_errorbar(aes(ymin = avg - se, ymax = avg + se), width = 0.2, position=position_dodge(.9))
+# or if you wanted 95% CIs
+ggplot(df,aes(x=condition,y=avg,group=age,fill=age)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  geom_errorbar(aes(ymin = avg - 1.96*se, ymax = avg + 1.96*se), width = 0.2, position=position_dodge(.9))
+
+# you can flip the graph 90-degrees with one extra command, coord_flip
+ggplot(df,aes(x=condition,y=avg,group=age,fill=age)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  geom_errorbar(aes(ymin = avg - 1.96*se, ymax = avg + 1.96*se), width = 0.2, position=position_dodge(.9)) + coord_flip()
+
+# if you wanted to plot this same thing as a line graph, easy-peasy. Lines (and points) have color rather than fill. 
+newline <- ggplot(df,aes(x=condition,y=avg,group=age, color=age)) + geom_point(size=3) + geom_line()
+newline
+# a little dodge is useful here too so that points with similar values can be distinguished, especially when you add error bars 
+newline2 <- ggplot(df,aes(x=condition,y=avg,group=age, color=age)) + geom_point(position = position_dodge(.05),size=3) + geom_line(position = position_dodge(.05))
+newline2 + geom_errorbar(aes(ymin = avg - .1, ymax = avg + .1), width = 0.2, position=position_dodge(.05))
+```
+
+## Other aesthetic spaces 
+
+So that's just a taste of some of the ways in which you can put together simple bar and line plots with error bars. To continue thinking in the grammar of graphics it's useful to think about how different plots are constructed. So far the bar and line plots we've made have a factor on the x-axis and a continuous variable on the y-axis. A scatterplot has a continuous variable on both axes. A histogram or density plot only has an x-variable; the y-variable is created by doing operations on the x-variable, i.e. counting the instances of a given x within some range. Let's see what that looks like in ggplot.
+
+```{r some other aesthetics}
+# let's simulate some continuous data for a scatterplot
+df <- data.frame(x=rnorm(100),y=rnorm(100))
+
+# and plot it in a scatterplot. notice that you don't have to assign the plot to an R object, you can just make it, in which case it appears immediately. And since we're thinking about assigning geometries to spaces, a scatterplot is just a bunch of points, which we already know how to plot!
+ggplot(df,aes(x=x,y=y)) + geom_point()
+# ggplot has some really cool built-in functions to e.g. add a regression line and a confidence band. The 'lm' is telling ggplot to add a linear model.
+ggplot(df,aes(x=x,y=y)) + geom_point() + geom_smooth(method='lm')
+# here's a 'loess' model, i.e. a locally weighted regression line
+ggplot(df,aes(x=x,y=y)) + geom_point() + geom_smooth(method='loess')
+
+# let's plot a histogram of those same x values from the plot above
+ggplot(df,aes(x=x)) + geom_histogram()
+# notice it gives you a little message saying that 30 might not be the best number of bins. This is easy to change...
+ggplot(df,aes(x=x)) + geom_histogram(bins=20)
+# or by specifying the width of the bins
+ggplot(df,aes(x=x)) + geom_histogram(binwidth = .1)
+
+# denstiy plots work the same way
+ggplot(df,aes(x=x)) + geom_density()
+# also easy to adjust the smoothing parameter to make it more or less smooth
+ggplot(df,aes(x=x)) + geom_density(adjust=2)
+ggplot(df,aes(x=x)) + geom_density(adjust=1/2)
+# it can be cool to overlay a density plot on a histogram
+ggplot(df,aes(x=x)) + geom_histogram(bins=20) + geom_density()
+# wait, what's up? Oh, the histogram is a count but the density is a estimate of the density, i.e. a proportion. We need to change the histogram to proportion too. You have to add the ..density.. to the aeshetic statement to tell it to do so. Weird code but it works.
+ggplot(df,aes(x=x, ..density..)) + geom_histogram(bins=20) + geom_density(adjust=1/2)
+# more on changing the appearance later but you can easily change color, line features, etc
+ggplot(df,aes(x=x, ..density..)) + geom_histogram(bins=20,color='black',fill='blue') + geom_density(adjust=1/2,linetype=2,size=1.5,color='red') + ggtitle("Not saying this looks good, but...")
+```
+
+## From summary data versus from raw data
+
+Broadly speaking when you want to plot something there are two approaches: 
+
+ - Compute some summary statistcs you'll want for plotting, like mean and standard error, save those to a dataframe, and pass that to ggplot.
+ - Pass your raw data, in long format (i.e. one observation per row), to ggplot, and let ggplot's summary functions do the work for you
+
+Both are useful in different circumstances, so you'll probalby want to understand both, but I find myself increasingly doing the second because then you can make richer use of ggplot's built-in functions to e.g. add the regression lines, create errorbars based on bootstrapped confidence intervals, and so on. So let's see a bit about how the latter works. We'll use the same data we used for the scatterplot but just pretend x and y are variables in a study.
+
+```{r working with raw data}
+# remember how I said we need the data in long format? let's do that first.
+# the gather command from the tidyr package is your friend here. It takes a dataframe that has values spread across multiple columns, and "gathers" those columns into a single column. To do this sensibly it requires you to give it names for two new variables that it will automatically add as new columns: a "key" that will tell you which value that row contains, and a "value", i.e. the name for the column that will actually contain the value. You then tell it what columns you want to gather in this way, and voila, it does it. Since our current df has 100 observations in 2 rows, we know that our long data will have 200 observations, the 100 x values followed by the 100 y values. It will also have a key column telling us whether a given value is an x or a y. and then "gathers" all the columns that you give it afterwards, in this case x and y, and puts them in the long dataframe. So we'll get a new dataframe that is in this case twice as long, 100 x values followed by 100 y values. So the command below tells R to create a new dataframe called df2 using the data from df, with a key column called measure, a value column called value, and based on the values in the columns x to y. 
+df2 <- gather(data=df,key=measure,value=value,x:y)
+# now we can use ggplot's stat_summary function to produce a plot of means. stat_summary has a lot of options--but here we're telling it that the function to produce a y is the 'mean' function, and that the geometry we want to apply is a bar. 
+plot1 <- ggplot(df2,aes(x=measure,y=value)) +
+  stat_summary(fun.y=mean, geom="bar")  
+plot1
+# we can add error bars in a similar way, in this case bootstrapped 95% CIs. How cool is that?
+plot1 + stat_summary(fun.data="mean_cl_boot", geom="errorbar") 
+
+# those are some ugly error bars, let's adjust
+plot1 + stat_summary(fun.data="mean_cl_boot", geom="errorbar", width=.3) 
+
+# this df is also in the right format to show a boxplot
+ggplot(df2,aes(x=measure,y=value)) + geom_boxplot()
+# and a violing plot, which is like a boxplot but provides more information on precisely where the data lie
+ggplot(df2,aes(x=measure,y=value)) + geom_violin()
+# or a variant that might be called a beeswarm plot, which is a violin plot composed of the raw data randomly jittered to keep points from overlapping. This creates a representation of density. For this we need the ggbeeswarm packsge
+ggplot(df2,aes(x=measure,y=value)) + geom_quasirandom()
+
+```
+
+## Beyond a 2 x 2: Faceting
+
+When you have something up to the level of complexity of a 2-way interaction the kinds of graphs I've just shown you are probably sufficient. When you get to a 3-way interaction though, you usually want to split your figure into more than one panel, what ggplot calls **faceting**. Faceting is really easy! Let's make a new dataframe to play with, one that represents a 2 x 2 x 2, in this case condition x age x country. Then we'll plot the data faceting by country. 
+
+More generally, faceting is really useful quickly make a given plot for each level of some other factor, e.g. for males and females, older kids and younger kids, different testing locations, whatever. Makes visually inspecting different "slices" of data really easy since ggplot handles all the slicing for you with just a single extra line of code and so no need to manually subset data, etc.
+
+```{r}
+# make a 2 x 2 x 2
+df3 <- rbind(data.frame(avg=runif(4),condition=c('treatment','control','treatment','control'),age=c('young','young','old','old'),country='US'),data.frame(avg=runif(4),condition=c('treatment','control','treatment','control'),age=c('young','young','old','old'),country='Japan'))
+
+# we're going to use the same code we used to make a 2 x 2 and just add a faceting instruction, facet_wrap.
+ggplot(df3,aes(x=condition,y=avg,group=age,fill=age)) +
+  geom_bar(stat='identity', position=position_dodge()) +
+  facet_wrap(~country)
+```
+
+## Cleaning up a figure
+
+There is an incredible range of options in ggplot to control the appearance and placement of basically everything. Far too much to go into here, but let's walk through taking one of the prior plots and trying to actually make it look reasonably nice. Most of what we do here would apply in the same or similar way to a different sort of plot. 
+
+```{r pretty it up}
+# remember this one?
+newbar + geom_errorbar(aes(ymin = avg - .1, ymax = avg + .1), width = 0.2, position=position_dodge(.9))
+# let's put it in a new R object so we can add stuff more easily
+newbar2 <- newbar + geom_errorbar(aes(ymin = avg - .1, ymax = avg + .1), width = 0.2, position=position_dodge(.9))
+
+# first let's get rid of the gray background by invoking theme_bw() 
+newbar3 <- newbar2 + theme_bw() 
+newbar3
+
+# and get rid of the minor gridlines using a more general theme edit, setting the minor grid lines element to blank, i.e. getting rid of them.
+newbar4 <- newbar3 + theme(panel.grid.minor = element_blank()) 
+newbar4
+# or maybe we want to get rid of the gridlines entirely
+newbar4 <- newbar3 + theme(panel.grid = element_blank()) 
+newbar4
+
+# now lets edit the axis labels
+newbar5 <- newbar4 + xlab("Condition") + ylab("Average Score")
+newbar5
+
+# Frequently you also want to edit the axis range, e.g. in this case make it range from 0 to 1
+newbar5 + ylim(0,1)
+# Or maybe you want more control over specifics
+newbar5 + scale_y_continuous(limits=c(0,1),breaks=c(0,.2,.4,.6,.8,1))
+# A different way to specify the numbers, here as a sequence bewteen 0 and 1 in intervals of .1
+newbar6 <- newbar5 + scale_y_continuous(limits=c(0,1),breaks=seq(0,1,.1))
+newbar6
+# I often find myself wanting to add a reference line, e.g. to reflect chance performance
+newbar6 + geom_hline(yintercept=.5)
+# that's ugly, let's make it lightgrey and dashed
+newbar7 <- newbar6 + geom_hline(yintercept=.5,linetype=2,color='lightgray')
+newbar7
+
+# edit axis text color and size using another theme element
+newbar8 <- newbar7 + theme(axis.title = element_text(face="bold", color="darkgray", size=20),axis.text  = element_text(size=16))
+newbar8
+
+# Adjust the legend in a few ways; for example I don't think you really need the legend heading
+newbar8 + theme(legend.title=element_blank())
+# and we should  increase the fontsize
+newbar8 + theme(legend.title=element_blank(),legend.text = element_text(size=16))
+# or do we want the legend on top?
+newbar9 <- newbar8 + theme(legend.title=element_blank(),legend.text = element_text(size=16),legend.position='top')
+newbar9
+
+# often our variable names or values are not what we actually want to display on the figure; we can fix this directly in the plot (you can obviously make new variable names / values and plot with those too but sometimes it's easier to change in the plot). Here's how you change legend categories
+newbar9 + scale_fill_discrete(breaks=c("old", "young"),labels=c("3-4-yr-olds", "6-7-yr-olds"))
+# and you can do the same thing two the axes
+newbar9 + 
+  scale_fill_discrete(breaks=c("old", "young"),labels=c("3-4-yr-olds", "6-7-yr-olds")) +
+  scale_x_discrete(breaks=c("control", "treatment"),labels=c("Control", "Experimental"))
+
+```
+
+## Pre-made themes
+
+There are also a bunch of pre-made themes that you can take and apply, and then edit to your needs. We'll use the ggthemes package, which bundles a bunch of these together. For variety we'll go back to our histogram and density plot example from above, and just show a few. You can still impose additional edits on top of these themes in the manner described above.
+
+```{r}
+# here's a slightly modified version of the histogram + density plot we made before
+plot <- ggplot(df,aes(x=x, ..density..)) + geom_histogram(bins=20,color='black',fill='gray') + geom_density(adjust=1/2,linetype=2,size=1.25,color='red') + ggtitle("Distribution of Something Interesting") +
+  ylab("Density of observations") + xlab("Value of Something Interesting")
+plot
+
+# here's the Economist theme
+plot + theme_economist()
+# here's a 538 theme
+plot + theme_fivethirtyeight()
+# maybe you just can't get enough Excel
+plot + theme_excel()
+# Here's a Tufte theme; he goes in for clean graphs without potentially distracting elements
+plot + theme_tufte()
+# for economists you can rock a Stata theme
+plot + theme_stata()
+# Wall Street Journal theme
+plot + theme_wsj()
+
+```
+
+Obviously there is much more we could do, ggplot is very flexible but that flexibility comes with a lot of complexity. There are literally books on plotting using ggplot. There are also many other packages that add differnet plotting geometries or different features, such as putting p-values and reference lines showing statistical results on the plots. Some of these are really cool and I encourage you to explore them.
+
+For now here are a few other resources:
+
+ - I basically taught myself ggplot by stealing code from the R Cookbook's section on graphs, http://www.cookbook-r.com/Graphs/
+ - There is also a free e-book called **The Hitchhiker's Guide to ggplot2**, available at https://leanpub.com/hitchhikers_ggplot2.  It's free / name your price for just the e-book but costs money if you want the R markdown as well. It has detailed instructions for making some standard graphs in various themes, including all the code.
+
+That's all for now!
+
