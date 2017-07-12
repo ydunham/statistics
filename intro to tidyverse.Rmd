@@ -1,0 +1,206 @@
+---
+title: "Brief intro to the tidyverse"
+author: "Yarrow Dunham"
+date: "6/21/2017"
+output: html_document
+---
+
+
+## The tidyverse
+
+The tidyverse is a collection of R packages designed to facilitate a bunch of everyday operations. You can find detailed manuals and vignettes on usage at <http://tidyverse.org>.
+
+The tidyverse is broad and deep so this brief intro will only scratch the surface. We'll focus on:
+
+ - reformatting data from long to wide and back again using the **tidyr** package
+ - sorting, summarizing, merging, etc with the **dplyr** package
+ - combining operations using piping from the **magrittr** pacakage
+
+All these packages are part of the tidyverse so if you load the tidyverse you'll have them ready to go.
+
+We'll start with some fake data loosely based on the "status default" study Helena and Yarrow conducted. We have 76 participants, each of whom responded to 10 status vignettes and some intergroup bias items. The data starts out in "wide" format, i.e. each subject is one row and their responses to all the items are spread across multiple columns. First we'll load the data and glance at it. 
+
+```{r setup}
+# load tidyverse
+library(tidyverse)
+
+# read data
+wide <- read_csv('~/Documents/General Research/Lab/Methods Lunch/widedata.csv')
+
+# print first few observations
+head(wide)
+```
+
+# Creating Tidy Data
+
+While we're pretty used to data in this format, there is actually something somewhat confusing here. Notice that if we want to compare vignettes we are comparing across columns, e.g. on average is Stickers > Blocks?
+But if we want to ask that question separately of boys and girls or kids of different ages, those operations involve slicing by rows. Thus, if we want to know if Stickers > Blocks and if that relationship differs for boys and girls we're operating across both columns and rows. Hadley Wickham, mastermind of the tidyverse, argues that it's much more sensible to have data in a format in which each row contains only one value we care about. Such data, which we calls *tidy data*, is the format that many summary functions, plotting functions, and modeling functions in R require. The key aspects of tidy data are:
+
+ - each observation is a row
+ - each variable is a column
+ - each value is a cell
+
+With data in this format all operations have a common structure.
+
+Our current data has 76 rows, one per subject, and 14 columns, 11 of which are measured values (i.e. responses to questions). Let's assume that the last column, ingroupmean, is already an aggregated intergroup bias score. So that means we have 10 measures values that we want to use as the basis of converting our data to long format. So if we now have 76 rows with 10 observations each and we want to have only one observation per row, our long data will be 10x as long, i.e. 760 rows.
+
+The function to convert data from wide to long in the tidyr package is called 'gather'. Conceptually, we are identifying a bunch of values that are spread across multiple rows and *gathering* them into a single column.
+
+But we want to preserve the key aspect of the old structure, namely that these are different vignettes. So we need to create a 'key' coluumn that identifies which item is in a given row. We also need to create a column to store the value we're copying over. So let's look at the gather function, converting our wide data to long.
+
+```{r convert to long}
+# convert to long
+long <- gather(data=wide,key=item,value=value,Bread:Swimming)
+# if you remember the order you don't need the function variable names. So the following is the same thing:
+long <- gather(wide,item,value,Bread:Swimming)
+# print first few observations
+head(long)
+```
+
+
+Notice that now each row has one value, in the value column. That value is indexed by the item column; so above we're seeing the 'Bread' item for the first 6 subjects. We should have 10 rows per subject. Let's look at the 10 rows for a given subject by arranging (i.e. sorting) the data by subject and then printing 10 rows.
+
+```{r arranged by subject}
+# arrange the long df by subject
+long <- arrange(long,subject)
+# print the first 10 observations
+head(long,10)
+```
+
+So now you can see that we have one observation for each of the 10 items. Notice that the subject number, gender, age, and ingroupmean scores are the same for each row--this is as it should be! That subject only has one value for each of those variables (as opposed to 10 values for each of the 10 vignettes). 
+
+Sometimes you might want to go from long to wide. The opposite of the gather function is the spread function. Conceptually it's just taking values from a single column and spreading them across multiple columns. In addition to telling spread what values to use, you need to give it a column that contains the names for the new columns spread will make. But basically it looks just like gather.
+
+```{r long to side}
+# using spread to go from long to wide
+widev2 <- spread(data=long,key=item,value=value)
+# again, if you use the function variables in this order you don't need to identify them
+widev2 <- spread(long,item,value)
+head(widev2)
+```
+
+# Manipulating data with dplyr
+
+dplyr seeks to be a 'grammar of data manipulation'. It eases some of the most common tasks you'll want to do, for example the following (with the dplyr function name in parentheses):
+
+ - creating a new variable that's a function of other variables (mutate)
+ - picks variables to do something with (select)
+ - picks cases/rows based on their values on some columns (filter)
+ - sorts data by the value on some column (arrange--we used this above)
+ - creating a new variable that's a summary of lots of values (summarise)
+ - rename variables (rename)
+ - merging data from multiple dataframes (several versions of the join function)
+ - do any of those things independently for different subsets of the data (group_by)
+
+We won't go over all of these but we'll provide some examples of most, either in this section or in the piping section below.
+
+One of the most common things you might want to do is get the mean values for responses to some variable, say the mean responses to each of the 10 status vignettes in our long dataframe. This is super easy with the summarise command.
+
+```{r get means}
+
+statMeans <- summarise(long,itemMean = mean(value))
+statMeans
+# Wait, that didn't do what we wanted--it provided a single mean for all vignettes! We need to group_by first
+statMeans <- summarise(group_by(long,item),itemMean=mean(value))
+head(statMeans,10) # output first 10 rows, which is all of them
+# You can create multiple summary variables this same way
+statMeans2 <- summarise(group_by(long,item),itemMean=mean(value),itemSD=sd(value),itemN=length(value))
+# and use the variables you created immediatley in subsequent steps
+statMeans2 <- summarise(group_by(long,item),itemMean=mean(value),itemSD=sd(value),itemN=length(value),
+                        itemSE = itemSD/sqrt(itemN))
+
+```
+
+So that one command made a df that would be useful for plotting from, for example, or making a table of means. 
+Mutate creates new columns based on other columns. E.g. if you wanted to create a mean-centered column for the itemMeans.
+
+```{r using mutate}
+# using mutate and then plotting
+statMeans2 <- mutate(statMeans2,meanC = itemMean - mean(itemMean))
+head(statMeans2)
+
+ggplot(statMeans2,aes(x=item,y=itemMean)) + geom_bar(stat='identity') + geom_linerange(aes(min=itemMean-itemSE,max=itemMean+itemSE))
+
+# transmute is the same except it only keeps the columns you created, dropping everything else
+statMeans3 <- transmute(statMeans2,item=item,meanC = itemMean - mean(itemMean),meanSE=itemsSE)
+head(statMeans3)
+```
+
+select and filter are useful for quickly grabbing rows or columns; select grabs columns, i.e. you're selecting which columns/variables you want to keep. filter grabs rows, i.e. you're filtering the data contingently on values of some columns and only keeping the data that satisfies some criteria.
+
+```{r filter and select}
+# imagine we only want to focus on a few of the items. Items are in rows so we can filter out the ones we want. In this case we grab 4 items.
+someItems <- filter(long,item %in% c('Break','Truck','Lunch','Pencils'))
+head(someItems)
+
+# or imagine we only want to plot items that were higher than the overall mean
+statMeans4 <- filter(statMeans3,meanC > 0)
+head(statMeans4)
+
+# imagine we want to make a new  dataset that gets rid of some things we're not going to look at. This means dropping columns, so that means using select.
+long2 <- select(long,subject,item,value)
+head(long2)
+# you can also use the : to go from one column to another
+long2 <- select(long,subject,age:value)
+head(long2)
+# or you can drop columns with the - 
+long2 <- select(long,-ingroupmean,-age)
+head(long2)
+```
+
+# Piping
+
+The real power of tidyr and dplyr come to the fore when you start to use piping. Piping is a way of stringing together multiple operations from left to right. Classically in programming you have to string things together from inside to outside, as in the example we used above when we wanted to group_by and then summarise:
+
+statMeans <- summarise(group_by(long,item),itemMean=mean(value))
+
+This example isn't so bad, but if you are chaining together more things you end up with long sections of nested code that can be very hard to read. Or you have to create a ton of intermediate variables or dfs and do it sequentially. Piping provides another way to do this.
+
+Piping uses the **%>%** operator, which takes whatever has happened on the left and pipes it forward to the right. So let's do that same statMeans both ways.
+
+```{r simple piping}
+# what we did before
+statMeans <- summarise(group_by(long,item),itemMean=mean(value))
+head(statMeans)
+# with piping. things to the left of %>% are passed forward to the right so you don't have to keep indicating the df, etc
+statMeans <- long %>%
+  group_by(item) %>%
+  summarise(itemMean=mean(value))
+head(statMeans)
+```
+
+It's not atually shorter in this particular example, but I think it's clearer, and you can walk through it in ordinary language: create a new R object called statMeans, based on the R object long; group the data by item and then summarise by creating a new variable called itemMean.
+
+Things get more interesting when you chain together longer sequences of commands from the different tidyverse packages. So we dan get from our original wide data to that summary data all in one longer pipe.
+
+Or from our original wide data to a graph of summary statistics.
+
+```{r}
+# go from our original wide data to the df of averages
+averages <- wide %>%
+  gather(item,value,Bread:Swimming) %>%
+  group_by(item) %>%  
+  summarise(itemMean = mean(value),itemSD = sd(value), itemN = length(value)) %>%  
+  mutate(itemSE = itemSD/sqrt(itemN)) %>%
+  arrange(itemMean)
+head(averages)
+
+# go from the original wide data to a plot
+avgPlot <-  wide %>%
+  gather(item,value,Bread:Swimming) %>%
+  group_by(item) %>%  
+  summarise(itemMean = mean(value),itemSD = sd(value), itemN = length(value), itemSE = itemSD/sqrt(itemN)) %>%   ggplot(aes(x=item,y=itemMean)) + geom_bar(stat='identity') +   geom_errorbar(aes(ymin=itemMean-itemSE,ymax=itemMean+itemSE),width=.5)
+avgPlot
+
+# or like above but you also want to rename a variable
+averages <- wide %>%
+  gather(item,value,Bread:Swimming) %>%
+  group_by(item) %>%  
+  summarise(itemMean = mean(value),itemSD = sd(value), itemN = length(value)) %>%  
+  mutate(itemSE = itemSD/sqrt(itemN)) %>%
+  rename(itemM = itemMean) %>%
+  arrange(itemM)
+head(averages)
+  
+```
+
