@@ -25,7 +25,7 @@ We'll start with some fake data loosely based on the "status default" study Hele
 library(tidyverse)
 
 # read data
-wide <- read_csv('~/Documents/General Research/Lab/Methods Lunch/widedata.csv')
+wide <- read_csv("https://raw.githubusercontent.com/ydunham/statistics/master/widedata.csv")
 
 # print first few observations
 head(wide)
@@ -108,7 +108,7 @@ statMeans2 <- summarise(group_by(long,item),itemMean=mean(value),itemSD=sd(value
 # and use the variables you created immediatley in subsequent steps
 statMeans2 <- summarise(group_by(long,item),itemMean=mean(value),itemSD=sd(value),itemN=length(value),
                         itemSE = itemSD/sqrt(itemN))
-
+head(statMeans2)
 ```
 
 So that one command made a df that would be useful for plotting from, for example, or making a table of means. 
@@ -122,7 +122,7 @@ head(statMeans2)
 ggplot(statMeans2,aes(x=item,y=itemMean)) + geom_bar(stat='identity') + geom_linerange(aes(min=itemMean-itemSE,max=itemMean+itemSE))
 
 # transmute is the same except it only keeps the columns you created, dropping everything else
-statMeans3 <- transmute(statMeans2,item=item,meanC = itemMean - mean(itemMean),meanSE=itemsSE)
+statMeans3 <- transmute(statMeans2,item=item,meanC = itemMean - mean(itemMean),meanSE=itemSE)
 head(statMeans3)
 ```
 
